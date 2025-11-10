@@ -1,0 +1,25 @@
+/* Make the map take the full screen */
+#map {
+  height: 100vh;
+  width: 100%;
+}
+
+/* Style for the GPS button */
+#locate-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 1000;
+  background: #0078ff;
+  color: white;
+  padding: 10px 15px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 16px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+#locate-btn:hover {
+  background: #005fcc;
+}
