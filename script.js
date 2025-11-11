@@ -1,6 +1,4 @@
-// -------------------
-// script.js (replace whole file)
-// -------------------
+//hosting - http://localhost:8000
 
 // Initialize the map (centered on Mumbai by default)
 const map = L.map("map").setView([19.076, 72.8777], 14);
@@ -9,6 +7,28 @@ const map = L.map("map").setView([19.076, 72.8777], 14);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   attribution: "&copy; OpenStreetMap contributors",
 }).addTo(map);
+
+// --- OpenRouteService API Key ---
+const ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjdkZjZhMjIwNjRlZTRhNGRiZWM3OWU5YzhiNTU4NmY3IiwiaCI6Im11cm11cjY0In0="; // replace with your actual key
+
+// --- Function to get route using OpenRouteService ---
+async function findRoute(start, end) {
+  const url = `https://api.openrouteservice.org/v2/directions/driving-car?api_key=${ORS_API_KEY}&start=${start[1]},${start[0]}&end=${end[1]},${end[0]}`;
+
+  const response = await fetch(url);
+  const data = await response.json();
+
+  // Get route coordinates from response
+  const routeCoords = data.features[0].geometry.coordinates.map(c => [c[1], c[0]]);
+  
+  // Draw route on map
+  L.polyline(routeCoords, { color: "red", weight: 5 }).addTo(map);
+  
+  // Fit map to route
+  map.fitBounds(L.polyline(routeCoords).getBounds());
+}
+
+
 
 // -------------------
 // Safe zones (your data)
@@ -239,4 +259,142 @@ function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 }
+
+// -------------------
+// Dijkstra's Algorithm Implementation
+// -------------------
+function dijkstra(graph, start, target) {
+  const distances = {};
+  const prev = {};
+  const unvisited = new Set(Object.keys(graph));
+
+  // Initialize distances
+  for (const node of unvisited) {
+    distances[node] = Infinity;
+    prev[node] = null;
+  }
+  distances[start] = 0;
+
+  while (unvisited.size > 0) {
+    // Pick node with smallest tentative distance
+    let current = null;
+    for (const node of unvisited) {
+      if (current === null || distances[node] < distances[current]) {
+        current = node;
+      }
+    }
+
+    if (distances[current] === Infinity) break; // unreachable
+    unvisited.delete(current);
+
+    // Stop if we reached target
+    if (current === target) break;
+
+    // Update neighboring nodes
+    for (const neighbor in graph[current]) {
+      const alt = distances[current] + graph[current][neighbor];
+      if (alt < distances[neighbor]) {
+        distances[neighbor] = alt;
+        prev[neighbor] = current;
+      }
+    }
+  }
+
+  // Reconstruct shortest path
+  const path = [];
+  let u = target;
+  while (u) {
+    path.unshift(u);
+    u = prev[u];
+  }
+
+  return { distance: distances[target], path };
+}
+
+// -------------------
+// Build graph dynamically (connect nearby zones + user)
+// -------------------
+function buildGraph(userLat, userLng) {
+  const graph = {};
+
+  // Add user node
+  graph["You"] = {};
+
+  // Add connections between user and each safe zone
+  safeZones.forEach(zone => {
+    const dist = getDistanceFromLatLonInKm(userLat, userLng, zone.lat, zone.lng);
+    graph["You"][zone.name] = dist;
+  });
+
+  // Connect safe zones to each other (optional: only if close)
+  safeZones.forEach((zoneA) => {
+    graph[zoneA.name] = {};
+    safeZones.forEach((zoneB) => {
+      if (zoneA.name !== zoneB.name) {
+        const dist = getDistanceFromLatLonInKm(zoneA.lat, zoneA.lng, zoneB.lat, zoneB.lng);
+        if (dist < 2.5) { // connect if less than 2.5 km apart
+          graph[zoneA.name][zoneB.name] = dist;
+        }
+      }
+    });
+  });
+
+  return graph;
+}
+
+// -------------------
+// Find shortest path button handler
+// -------------------
+document.getElementById("path-btn").addEventListener("click", () => {
+  if (!userMarker) {
+    alert("Set your current location first!");
+    return;
+  }
+
+  const userLatLng = userMarker.getLatLng();
+  const graph = buildGraph(userLatLng.lat, userLatLng.lng);
+
+  // Ask user which safe zone they want to go to
+  const zoneNames = safeZones.map(z => z.name).join("\n");
+  const target = prompt(`Enter target safe zone name:\n${zoneNames}`);
+
+  if (!target || !graph[target]) {
+    alert("Invalid safe zone name!");
+    return;
+  }
+
+  const result = dijkstra(graph, "You", target);
+  if (!result.path || result.path.length === 0) {
+    alert("No path found!");
+    return;
+  }
+
+  // Draw path on map
+  const pathCoords = [];
+  result.path.forEach(name => {
+    if (name === "You") {
+      pathCoords.push([userLatLng.lat, userLatLng.lng]);
+    } else {
+      const zone = safeZones.find(z => z.name === name);
+      if (zone) pathCoords.push([zone.lat, zone.lng]);
+    }
+  });
+
+  L.polyline(pathCoords, { color: "blue", weight: 5 }).addTo(map);
+  alert(`Shortest path: ${result.path.join(" → ")}\nTotal distance: ${result.distance.toFixed(2)} km`);
+});
+// --- Find shortest path button ---
+document.getElementById("path-btn").addEventListener("click", () => {
+  if (!userMarker) {
+    alert("Please click 'Use My Location' first!");
+    return;
+  }
+
+  // You can change which safe zone to target (for now we’ll use the first one)
+  const start = userMarker.getLatLng();
+  const end = safeZones[0].getLatLng(); 
+
+  findRoute([start.lat, start.lng], [end.lat, end.lng]);
+});
+
 
