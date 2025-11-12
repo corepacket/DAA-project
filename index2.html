@@ -1,0 +1,922 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Safe Zone Navigator - Mumbai</title>
+  
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      background: rgba(255, 255, 255, 0.95);
+      padding: 15px 20px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      text-align: center;
+    }
+
+    h1 {
+      color: #2c3e50;
+      font-size: 24px;
+      margin-bottom: 5px;
+    }
+
+    .subtitle {
+      color: #7f8c8d;
+      font-size: 14px;
+    }
+
+    .container {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    .sidebar {
+      width: 320px;
+      background: white;
+      padding: 20px;
+      overflow-y: auto;
+      box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+    }
+
+    #map {
+      flex: 1;
+      height: 100%;
+    }
+
+    .control-group {
+      margin-bottom: 20px;
+    }
+
+    .control-group h3 {
+      color: #2c3e50;
+      font-size: 16px;
+      margin-bottom: 10px;
+      border-bottom: 2px solid #3498db;
+      padding-bottom: 5px;
+    }
+
+    button {
+      width: 100%;
+      padding: 12px;
+      margin: 8px 0;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+    }
+
+    button:active {
+      transform: translateY(0);
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%);
+    }
+
+    .btn-secondary {
+      background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+    }
+
+    .btn-danger {
+      background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+    }
+
+    .status-panel {
+      background: #f8f9fa;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 15px;
+      border-left: 4px solid #3498db;
+    }
+
+    .status-item {
+      margin: 8px 0;
+      font-size: 13px;
+      color: #2c3e50;
+    }
+
+    .status-item strong {
+      color: #34495e;
+    }
+
+    .status-item.updating {
+      background: #fff3cd;
+      padding: 8px;
+      border-radius: 4px;
+      animation: pulse 1.5s infinite;
+    }
+
+    .status-item.error {
+      background: #f8d7da;
+      padding: 8px;
+      border-radius: 4px;
+      color: #721c24;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+
+    .info-box {
+      background: #e8f4fd;
+      padding: 12px;
+      border-radius: 8px;
+      margin-top: 15px;
+      font-size: 12px;
+      color: #2c3e50;
+      border-left: 4px solid #3498db;
+    }
+
+    .info-box strong {
+      display: block;
+      margin-bottom: 5px;
+      color: #2980b9;
+    }
+
+    /* Responsive Design */
+    @media (max-width: 768px) {
+      .container {
+        flex-direction: column;
+      }
+
+      .sidebar {
+        width: 100%;
+        max-height: 40vh;
+        overflow-y: auto;
+      }
+
+      #map {
+        height: 60vh;
+      }
+    }
+
+    /* Leaflet Popup Styling */
+    .leaflet-popup-content {
+      margin: 12px;
+      font-size: 13px;
+    }
+
+    .leaflet-popup-content b {
+      color: #2c3e50;
+      font-size: 15px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🗺️ Safe Zone Navigator</h1>
+    <p class="subtitle">Find the safest route to emergency facilities in Mumbai</p>
+  </header>
+
+  <div class="container">
+    <aside class="sidebar">
+      <!-- Location Controls -->
+      <div class="control-group">
+        <h3>📍 Your Location</h3>
+        <button id="locate-btn" class="btn-primary">📡 Use My Location</button>
+        <button id="manualBtn" class="btn-secondary">✏️ Set Manual Location</button>
+      </div>
+
+      <!-- Status Panel -->
+      <div class="status-panel">
+        <div id="locStatus" class="status-item">
+          <strong>Status:</strong> <span class="status-text">Not set</span>
+        </div>
+        <div id="locCoords" class="status-item">
+          <strong>Coordinates:</strong> -
+        </div>
+        <div id="locAccuracy" class="status-item">
+          <strong>Accuracy:</strong> -
+        </div>
+      </div>
+
+      <!-- Navigation Controls -->
+      <div class="control-group">
+        <h3>🚶 Navigation</h3>
+        <button id="nearest-btn" class="btn-primary">🎯 Find Nearest Safe Zone</button>
+        <button id="path-btn" class="btn-secondary">🗺️ Find Shortest Path</button>
+        <button id="clear-btn" class="btn-danger">🗑️ Clear Path</button>
+      </div>
+
+      <!-- Info Box -->
+      <div class="info-box">
+        <strong>💡 How to Use:</strong>
+        1. Click "Use My Location" to get GPS location<br>
+        2. Or click on the map to set location manually<br>
+        3. Find nearest safe zone or calculate specific route<br>
+        4. Follow the green walking path on roads!
+      </div>
+
+      <div class="info-box">
+        <strong>🏥 Available Safe Zones:</strong>
+        • Hospitals (🏥)<br>
+        • Fire Stations (🚒)<br>
+        • Shelters (🏠)
+      </div>
+    </aside>
+
+    <div id="map"></div>
+  </div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <script>
+// ==========================================
+// GLOBAL VARIABLES
+// ==========================================
+let map;
+let userMarker = null;
+let accuracyCircle = null;
+let watchId = null;
+let currentPath = null;
+let routeMarkers = [];
+
+// OpenRouteService API Key (Get your free key at https://openrouteservice.org/dev/#/signup)
+const ORS_API_KEY = 'eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjdkZjZhMjIwNjRlZTRhNGRiZWM3OWU5YzhiNTU4NmY3IiwiaCI6Im11cm11cjY0In0='; // Demo key - replace with your own!
+
+// Safe zones data for Mumbai area
+const safeZones = [
+  { 
+    name: "Sengol Hospital", 
+    type: "Hospital", 
+    lat: 19.023163570782586, 
+    lng: 72.86265244005956, 
+    icon: "🏥",
+    color: "#e74c3c"
+  },
+  { 
+    name: "Galaxy Multispeciality Hospital", 
+    type: "Hospital", 
+    lat: 19.023109083290297, 
+    lng: 72.86369822441524, 
+    icon: "🏥",
+    color: "#e74c3c"
+  },
+  { 
+    name: "Diwan Hospital", 
+    type: "Hospital", 
+    lat: 19.02294410317297, 
+    lng: 72.8438225063043,
+    icon: "🏥",
+    color: "#e74c3c"
+  },
+  { 
+    name: "HVS Symbiosis Hospital", 
+    type: "Hospital", 
+    lat: 19.021287839137955, 
+    lng: 72.84273163483728,
+    icon: "🏥",
+    color: "#e74c3c"
+  },
+  { 
+    name: "Dadar Fire Station", 
+    type: "Fire Station", 
+    lat: 19.014774266340766, 
+    lng: 72.870195173033,
+    icon: "🚒",
+    color: "#f39c12"
+  },
+  { 
+    name: "Wadala Fire Station", 
+    type: "Fire Station", 
+    lat: 19.025309086821892, 
+    lng: 72.87128833919559,
+    icon: "🚒",
+    color: "#f39c12"
+  },
+  { 
+    name: "Regional Command Center", 
+    type: "Shelter", 
+    lat: 19.025143155540935, 
+    lng: 72.870195173033,
+    icon: "🏠",
+    color: "#3498db"
+  }
+];
+
+// ==========================================
+// INITIALIZATION
+// ==========================================
+function initMap() {
+  // Initialize Leaflet map centered on Mumbai
+  map = L.map("map").setView([19.076, 72.8777], 13);
+
+  // Add OpenStreetMap tile layer
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: "&copy; OpenStreetMap contributors",
+    maxZoom: 19
+  }).addTo(map);
+
+  // Add markers for all safe zones
+  addSafeZoneMarkers();
+
+  // Initialize event listeners
+  initEventListeners();
+}
+
+// ==========================================
+// SAFE ZONE MARKERS
+// ==========================================
+function addSafeZoneMarkers() {
+  safeZones.forEach((zone) => {
+    const customIcon = L.divIcon({
+      html: `<div style="
+        background: ${zone.color}; 
+        width: 35px; 
+        height: 35px; 
+        border-radius: 50%; 
+        border: 3px solid white; 
+        box-shadow: 0 3px 8px rgba(0,0,0,0.4); 
+        display: flex; 
+        align-items: center; 
+        justify-content: center; 
+        font-size: 18px;
+        cursor: pointer;
+      ">${zone.icon}</div>`,
+      className: '',
+      iconSize: [35, 35]
+    });
+
+    zone.marker = L.marker([zone.lat, zone.lng], { icon: customIcon })
+      .addTo(map)
+      .bindPopup(`
+        <b>${zone.name}</b><br>
+        <strong>Type:</strong> ${zone.type}<br>
+        <strong>Icon:</strong> ${zone.icon}<br>
+        <small>Click "Find Shortest Path" to navigate here</small>
+      `);
+  });
+}
+
+// ==========================================
+// EVENT LISTENERS
+// ==========================================
+function initEventListeners() {
+  // Use My Location button
+  document.getElementById("locate-btn").addEventListener("click", getUserLocation);
+
+  // Find Nearest Safe Zone button
+  document.getElementById("nearest-btn").addEventListener("click", findNearestZone);
+
+  // Calculate Shortest Path button
+  document.getElementById("path-btn").addEventListener("click", calculateShortestPath);
+
+  // Clear Path button
+  document.getElementById("clear-btn").addEventListener("click", clearPath);
+
+  // Manual location button
+  document.getElementById("manualBtn").addEventListener("click", setManualLocation);
+
+  // Map click event
+  map.on('click', onMapClick);
+}
+
+// ==========================================
+// LOCATION FUNCTIONS
+// ==========================================
+function getUserLocation() {
+  // Stop any existing watch
+  if (watchId !== null) {
+    navigator.geolocation.clearWatch(watchId);
+    watchId = null;
+  }
+
+  if (!navigator.geolocation) {
+    showAlert("error", "Geolocation is not supported by your browser");
+    return;
+  }
+
+  updateStatus("🔍 Requesting location...", "updating");
+
+  watchId = navigator.geolocation.watchPosition(
+    onLocationSuccess,
+    onLocationError,
+    {
+      enableHighAccuracy: true,
+      timeout: 20000,
+      maximumAge: 0
+    }
+  );
+}
+
+function onLocationSuccess(position) {
+  const lat = position.coords.latitude;
+  const lng = position.coords.longitude;
+  const accuracy = position.coords.accuracy;
+  const timestamp = new Date(position.timestamp).toLocaleTimeString();
+
+  console.log("Location received:", { lat, lng, accuracy, timestamp });
+
+  updateStatus(`✅ Location found (${timestamp})`);
+  updateCoordinates(lat, lng);
+  updateAccuracy(accuracy);
+
+  setUserLocation(lat, lng, 'gps', accuracy);
+}
+
+function onLocationError(error) {
+  console.error("Geolocation error:", error);
+  updateStatus(`❌ Error: ${error.message}`);
+  
+  showAlert(
+    "error",
+    "Unable to get location. Please:\n• Allow location permission\n• Use HTTPS or localhost\n• Disable VPN\n• Try manual entry"
+  );
+}
+
+function setManualLocation() {
+  const lat = parseFloat(prompt("Enter latitude (e.g., 19.076):"));
+  const lng = parseFloat(prompt("Enter longitude (e.g., 72.8777):"));
+
+  if (isNaN(lat) || isNaN(lng)) {
+    showAlert("error", "Invalid coordinates entered");
+    return;
+  }
+
+  if (watchId !== null) {
+    navigator.geolocation.clearWatch(watchId);
+    watchId = null;
+  }
+
+  setUserLocation(lat, lng, 'manual');
+}
+
+function setUserLocation(lat, lng, source = 'gps', accuracy = null) {
+  // Remove old markers
+  if (userMarker) map.removeLayer(userMarker);
+  if (accuracyCircle) map.removeLayer(accuracyCircle);
+
+  // Create user icon
+  const userIcon = L.divIcon({
+    html: `<div style="
+      background: #4CAF50; 
+      width: 24px; 
+      height: 24px; 
+      border-radius: 50%; 
+      border: 4px solid white; 
+      box-shadow: 0 0 12px rgba(76,175,80,0.8);
+      animation: pulse 2s infinite;
+    "></div>`,
+    className: '',
+    iconSize: [24, 24]
+  });
+
+  // Add user marker
+  userMarker = L.marker([lat, lng], {
+    icon: userIcon,
+    draggable: true
+  }).addTo(map);
+
+  // Popup content
+  const popupContent = `
+    <b>📍 Your Location</b><br>
+    <strong>Source:</strong> ${source}<br>
+    <strong>Latitude:</strong> ${lat.toFixed(6)}<br>
+    <strong>Longitude:</strong> ${lng.toFixed(6)}
+    ${accuracy ? `<br><strong>Accuracy:</strong> ±${Math.round(accuracy)}m` : ''}
+    <br><small>💡 Drag marker to adjust</small>
+  `;
+
+  userMarker.bindPopup(popupContent).openPopup();
+
+  // Handle marker drag
+  userMarker.on('dragend', (e) => {
+    const position = e.target.getLatLng();
+    setUserLocation(position.lat, position.lng, 'adjusted');
+    
+    if (watchId !== null) {
+      navigator.geolocation.clearWatch(watchId);
+      watchId = null;
+      updateStatus("📍 Manually adjusted");
+    }
+  });
+
+  // Add accuracy circle
+  if (accuracy && !isNaN(accuracy)) {
+    accuracyCircle = L.circle([lat, lng], {
+      radius: accuracy,
+      color: '#4CAF50',
+      fillColor: '#4CAF50',
+      fillOpacity: 0.1,
+      weight: 2
+    }).addTo(map);
+  }
+
+  // Center map
+  map.setView([lat, lng], 14);
+}
+
+function onMapClick(e) {
+  const { lat, lng } = e.latlng;
+  
+  const confirmed = confirm(
+    `Set your location here?\n\nLatitude: ${lat.toFixed(6)}\nLongitude: ${lng.toFixed(6)}`
+  );
+
+  if (confirmed) {
+    if (watchId !== null) {
+      navigator.geolocation.clearWatch(watchId);
+      watchId = null;
+    }
+    setUserLocation(lat, lng, 'map click');
+  }
+}
+
+// ==========================================
+// DISTANCE CALCULATION (Haversine Formula)
+// ==========================================
+function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
+  const R = 6371; // Earth's radius in km
+  const dLat = deg2rad(lat2 - lat1);
+  const dLon = deg2rad(lon2 - lon1);
+  
+  const a = 
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const distance = R * c;
+  
+  return distance;
+}
+
+function deg2rad(deg) {
+  return deg * (Math.PI / 180);
+}
+
+// ==========================================
+// OPENROUTESERVICE API INTEGRATION
+// ==========================================
+// ✅ Improved function to get walking route using OpenRouteService
+async function getWalkingRoute(startLng, startLat, endLng, endLat) {
+  const url = "https://api.openrouteservice.org/v2/directions/foot-walking/geojson";
+
+  const requestBody = {
+    coordinates: [
+      [startLng, startLat],
+      [endLng, endLat]
+    ],
+    preference: "shortest", // ✅ ensures realistic walking path (no crossing rivers)
+    instructions: true,
+    units: "m"
+  };
+
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Authorization": ORS_API_KEY, // ✅ your ORS API key
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(requestBody)
+    });
+
+    if (!response.ok) {
+      throw new Error(`ORS API Error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    if (!data.features || !data.features.length) {
+      throw new Error("No route found");
+    }
+
+    const geometry = data.features[0].geometry.coordinates;
+    const latLngs = geometry.map(coord => [coord[1], coord[0]]);
+
+    const summary = data.features[0].properties.summary;
+    const instructions = data.features[0].properties.segments[0].steps.map(
+      step => step.instruction
+    );
+
+    return {
+      coordinates: latLngs,
+      distance: summary.distance,
+      duration: summary.duration,
+      instructions: instructions
+    };
+  } catch (error) {
+    console.error("OpenRouteService error:", error);
+    throw error;
+  }
+}
+
+// ==========================================
+// DRAW ROUTE ON MAP
+// ==========================================
+function drawRoute(routeData) {
+  // Draw the main route
+  currentPath = L.polyline(routeData.coordinates, {
+    color: "#2ecc71",
+    weight: 6,
+    opacity: 0.9,
+    lineJoin: 'round'
+  }).addTo(map);
+
+  // Add arrow markers along the route
+  addRouteArrows(routeData.coordinates);
+
+  // Fit map to show entire route
+  map.fitBounds(currentPath.getBounds(), { padding: [60, 60] });
+}
+
+// ==========================================
+// ADD DIRECTIONAL ARROWS ON ROUTE
+// ==========================================
+function addRouteArrows(coordinates) {
+  // Add arrows every 10th coordinate or at key points
+  const step = Math.max(1, Math.floor(coordinates.length / 8));
+  
+  for (let i = step; i < coordinates.length - 1; i += step) {
+    const midLat = coordinates[i][0];
+    const midLng = coordinates[i][1];
+
+    const arrowMarker = L.marker([midLat, midLng], {
+      icon: L.divIcon({
+        html: '<div style="color: #2ecc71; font-size: 24px; text-shadow: 0 0 4px white; transform: rotate(0deg);">➜</div>',
+        className: '',
+        iconSize: [24, 24]
+      }),
+      interactive: false
+    }).addTo(map);
+
+    routeMarkers.push(arrowMarker);
+  }
+}
+
+// ==========================================
+// FIND NEAREST SAFE ZONE
+// ==========================================
+async function findNearestZone() {
+  if (!userMarker) {
+    showAlert("warning", "Please set your location first!");
+    return;
+  }
+
+  const userPosition = userMarker.getLatLng();
+  let nearestZone = null;
+  let minDistance = Infinity;
+
+  // Find nearest zone using straight-line distance
+  safeZones.forEach(zone => {
+    const distance = getDistanceFromLatLonInKm(
+      userPosition.lat, userPosition.lng,
+      zone.lat, zone.lng
+    );
+
+    if (distance < minDistance) {
+      minDistance = distance;
+      nearestZone = zone;
+    }
+  });
+
+  if (!nearestZone) {
+    showAlert("error", "No safe zones found!");
+    return;
+  }
+
+  // Clear previous path
+  clearPath();
+
+  updateStatus("🔍 Calculating walking route...", "updating");
+
+  try {
+    // Get actual walking route from OpenRouteService
+    const routeData = await getWalkingRoute(
+      userPosition.lng, userPosition.lat,
+      nearestZone.lng, nearestZone.lat
+    );
+
+    if (routeData) {
+      // Draw the route
+      drawRoute(routeData);
+
+      // Open popup
+      nearestZone.marker.openPopup();
+
+      const distanceMeters = routeData.distance;
+      const durationMinutes = Math.ceil(routeData.duration / 60);
+
+      updateStatus("✅ Route calculated!");
+
+      showAlert(
+        "success",
+        `✅ Nearest Safe Zone Found!\n\n` +
+        `📍 ${nearestZone.name}\n` +
+        `${nearestZone.icon} Type: ${nearestZone.type}\n` +
+        `📏 Walking Distance: ${distanceMeters.toFixed(0)} meters\n` +
+        `⏱️ Est. walking time: ${durationMinutes} minutes\n\n` +
+        `🚶 Follow the green path on roads!`
+      );
+    }
+  } catch (error) {
+    console.error("Routing error:", error);
+    updateStatus("❌ Routing failed", "error");
+    
+    // Fallback to straight line
+    currentPath = L.polyline([
+      [userPosition.lat, userPosition.lng],
+      [nearestZone.lat, nearestZone.lng]
+    ], {
+      color: "#f39c12",
+      weight: 6,
+      opacity: 0.8,
+      dashArray: '10, 10'
+    }).addTo(map);
+
+    map.fitBounds(currentPath.getBounds(), { padding: [60, 60] });
+    nearestZone.marker.openPopup();
+
+    showAlert(
+      "warning",
+      `⚠️ Using direct path (routing unavailable)\n\n` +
+      `📍 ${nearestZone.name}\n` +
+      `📏 Approximate distance: ${(minDistance * 1000).toFixed(0)} meters`
+    );
+  }
+}
+
+// ==========================================
+// CALCULATE SHORTEST PATH
+// ==========================================
+async function calculateShortestPath() {
+  if (!userMarker) {
+    showAlert("warning", "Please set your location first!");
+    return;
+  }
+
+  const userPosition = userMarker.getLatLng();
+
+  // Create zone list for prompt
+  const zoneList = safeZones
+    .map((zone, index) => `${index + 1}. ${zone.name} (${zone.type})`)
+    .join("\n");
+
+  const targetName = prompt(
+    `🎯 Enter the name of your destination:\n\n${zoneList}\n\nType the full name:`
+  );
+
+  if (!targetName) return;
+
+  // Find selected zone
+  const selectedZone = safeZones.find(
+    zone => zone.name.toLowerCase() === targetName.toLowerCase()
+  );
+
+  if (!selectedZone) {
+    showAlert("error", "Invalid safe zone name! Please enter the exact name.");
+    return;
+  }
+
+  // Clear previous path
+  clearPath();
+
+  updateStatus("🔍 Calculating optimal walking route...", "updating");
+
+  try {
+    // Get actual walking route from OpenRouteService
+    const routeData = await getWalkingRoute(
+      userPosition.lng, userPosition.lat,
+      selectedZone.lng, selectedZone.lat
+    );
+
+    if (routeData) {
+      // Draw the route
+      drawRoute(routeData);
+
+      const distanceMeters = routeData.distance;
+      const distanceKm = (distanceMeters / 1000).toFixed(2);
+      const durationMinutes = Math.ceil(routeData.duration / 60);
+
+      updateStatus("✅ Route calculated!");
+
+      // Get turn-by-turn instructions if available
+      let instructions = "";
+      if (routeData.instructions && routeData.instructions.length > 0) {
+        instructions = "\n\n📋 First 3 steps:\n" + 
+          routeData.instructions.slice(0, 3)
+            .map((step, i) => `${i + 1}. ${step}`)
+            .join("\n");
+      }
+
+      showAlert(
+        "success",
+        `✅ Walking Route Calculated!\n\n` +
+        `📍 Destination: ${selectedZone.name}\n` +
+        `${selectedZone.icon} Type: ${selectedZone.type}\n\n` +
+        `📏 Walking Distance: ${distanceMeters.toFixed(0)} meters (${distanceKm} km)\n` +
+        `⏱️ Est. walking time: ${durationMinutes} minutes\n` +
+        `🚶 Average pace: 5 km/h${instructions}\n\n` +
+        `Follow the green path on the map!`
+      );
+    }
+  } catch (error) {
+    console.error("Routing error:", error);
+    updateStatus("❌ Routing failed", "error");
+    
+    // Fallback to straight line
+    const directDistance = getDistanceFromLatLonInKm(
+      userPosition.lat, userPosition.lng,
+      selectedZone.lat, selectedZone.lng
+    );
+
+    currentPath = L.polyline([
+      [userPosition.lat, userPosition.lng],
+      [selectedZone.lat, selectedZone.lng]
+    ], {
+      color: "#f39c12",
+      weight: 6,
+      opacity: 0.8,
+      dashArray: '10, 10'
+    }).addTo(map);
+
+    map.fitBounds(currentPath.getBounds(), { padding: [60, 60] });
+
+    showAlert(
+      "warning",
+      `⚠️ Using direct path (routing unavailable)\n\n` +
+      `📍 ${selectedZone.name}\n` +
+      `📏 Approximate distance: ${(directDistance * 1000).toFixed(0)} meters`
+    );
+  }
+}
+
+// ==========================================
+// CLEAR PATH
+// ==========================================
+function clearPath() {
+  if (currentPath) {
+    map.removeLayer(currentPath);
+    currentPath = null;
+  }
+
+  routeMarkers.forEach(marker => map.removeLayer(marker));
+  routeMarkers = [];
+}
+
+// ==========================================
+// UI UPDATE FUNCTIONS
+// ==========================================
+function updateStatus(text, className = "") {
+  const statusElement = document.getElementById("locStatus");
+  const statusText = statusElement.querySelector('.status-text') || statusElement;
+  
+  if (statusElement.querySelector('strong')) {
+    statusText.textContent = text.replace('Status: ', '');
+  } else {
+    statusElement.innerHTML = `<strong>Status:</strong> <span class="status-text">${text}</span>`;
+  }
+  
+  statusElement.className = `status-item ${className}`;
+}
+
+function updateCoordinates(lat, lng) {
+  document.getElementById("locCoords").innerHTML = 
+    `<strong>Coordinates:</strong> ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+}
+
+function updateAccuracy(accuracy) {
+  document.getElementById("locAccuracy").innerHTML = 
+    `<strong>Accuracy:</strong> ±${Math.round(accuracy)} meters`;
+}
+
+function showAlert(type, message) {
+  alert(message);
+}
+
+// ==========================================
+// INITIALIZE ON PAGE LOAD
+// ==========================================
+document.addEventListener("DOMContentLoaded", initMap);
+  </script>
+</body>
+</html>
